@@ -744,6 +744,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e050f626429857a27ddccb31e0aca21356bfa709c04041aefddac081a8f068a"
 
 [[package]]
+name = "billing"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "hex",
+ "hmac",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "thiserror 2.0.17",
+ "tracing",
+ "ts-rs 11.0.1",
+ "uuid",
+]
+
+[[package]]
 name = "bindgen"
 version = "0.69.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4148,6 +4168,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "base64",
+ "billing",
  "chrono",
  "flate2",
  "futures",
