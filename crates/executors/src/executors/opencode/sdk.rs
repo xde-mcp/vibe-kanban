@@ -17,11 +17,12 @@ use tokio::{
     sync::{Mutex, mpsc, oneshot},
 };
 use tokio_util::sync::CancellationToken;
-use workspace_utils::approvals::ApprovalStatus;
+use workspace_utils::{approvals::ApprovalStatus, git};
 
 use super::types::OpencodeExecutorEvent;
 use crate::{
     approvals::{ExecutorApprovalError, ExecutorApprovalService},
+    env::RepoContext,
     executors::ExecutorError,
 };
 
@@ -81,6 +82,8 @@ pub struct RunConfig {
     pub approvals: Option<Arc<dyn ExecutorApprovalService>>,
     pub auto_approve: bool,
     pub server_password: String,
+    pub commit_reminder: bool,
+    pub repo_context: RepoContext,
 }
 
 /// Generate a cryptographically secure random password for OpenCode server auth.
@@ -250,9 +253,49 @@ async fn run_session_inner(
         return Ok(());
     }
 
+    prompt_result?;
+
+    // Handle commit reminder if enabled
+    if config.commit_reminder && !cancel.is_cancelled() {
+        let uncommitted_changes =
+            git::check_uncommitted_changes(&config.repo_context.repo_paths()).await;
+        if !uncommitted_changes.is_empty() {
+            let reminder_prompt = format!(
+                "There are uncommitted changes. Please stage and commit them now with a descriptive commit message.{}",
+                uncommitted_changes
+            );
+
+            tracing::debug!("Sending commit reminder prompt to OpenCode session");
+
+            let reminder_result = run_prompt_with_control(
+                SessionRequestContext {
+                    client: &client,
+                    base_url: &config.base_url,
+                    directory: &config.directory,
+                    session_id: &session_id,
+                },
+                &reminder_prompt,
+                model,
+                config.model_variant.clone(),
+                config.agent.clone(),
+                &mut control_rx,
+                cancel.clone(),
+            )
+            .await;
+
+            if let Err(e) = reminder_result {
+                // Log but don't fail the session on commit reminder errors
+                tracing::warn!("Commit reminder prompt failed: {e}");
+            }
+        }
+    }
+
+    if cancel.is_cancelled() {
+        send_abort(&client, &config.base_url, &config.directory, &session_id).await;
+    }
+
     event_handle.abort();
 
-    prompt_result?;
     log_writer.log_event(&OpencodeExecutorEvent::Done).await?;
 
     Ok(())

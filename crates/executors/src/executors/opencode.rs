@@ -114,6 +114,8 @@ impl Opencode {
         let agent = self.mode.clone();
         let auto_approve = self.auto_approve;
         let resume_session_id = resume_session.map(|s| s.to_string());
+        let commit_reminder = env.commit_reminder;
+        let repo_context = env.repo_context.clone();
 
         tokio::spawn(async move {
             // Wait for server to print listening URL
@@ -139,6 +141,8 @@ impl Opencode {
                 approvals,
                 auto_approve,
                 server_password,
+                commit_reminder,
+                repo_context,
             };
 
             let result = run_session(config, log_writer.clone(), interrupt_rx).await;
