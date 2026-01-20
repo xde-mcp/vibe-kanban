@@ -69,7 +69,6 @@ pub struct GitBranch {
 pub struct GitRemote {
     pub name: String,
     pub url: String,
-    pub is_default: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1625,12 +1624,7 @@ impl GitService {
 
         Ok(remotes
             .into_iter()
-            .enumerate()
-            .map(|(i, (name, url))| GitRemote {
-                is_default: i == 0,
-                name,
-                url,
-            })
+            .map(|(name, url)| GitRemote { name, url })
             .collect())
     }
 
