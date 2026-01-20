@@ -193,10 +193,13 @@ impl GitService {
         }
     }
 
-    /// Get the first remote name, falling back to "origin" if none exist.
-    /// This is used internally as a fallback when we need a remote name
-    /// but don't have one specified.
-    fn first_remote_name(&self, repo: &Repository) -> String {
+    fn default_remote_name(&self, repo: &Repository) -> String {
+        if let Ok(config) = repo.config()
+            && let Ok(default) = config.get_string("remote.pushDefault")
+        {
+            return default;
+        }
+
         if let Ok(remotes) = repo.remotes()
             && let Some(first) = remotes.iter().flatten().next()
         {
@@ -1610,6 +1613,11 @@ impl GitService {
             .map_err(GitServiceError::GitCLI)
     }
 
+    pub fn get_default_remote_name(&self, repo_path: &Path) -> Result<String, GitServiceError> {
+        let repo = self.open_repo(repo_path)?;
+        Ok(self.default_remote_name(&repo))
+    }
+
     pub fn list_remotes(&self, repo_path: &Path) -> Result<Vec<GitRemote>, GitServiceError> {
         let cli = GitCli::new();
         let remotes = cli.list_remotes(repo_path)?;
@@ -1618,15 +1626,6 @@ impl GitService {
             .into_iter()
             .map(|(name, url)| GitRemote { name, url })
             .collect())
-    }
-
-    pub fn get_remote(&self, repo_path: &Path, name: &str) -> Result<GitRemote, GitServiceError> {
-        let cli = GitCli::new();
-        let url = cli.get_remote_url(repo_path, name)?;
-        Ok(GitRemote {
-            name: name.to_string(),
-            url,
-        })
     }
 
     pub fn check_remote_branch_exists(
@@ -1662,7 +1661,7 @@ impl GitService {
         self.get_remote_name_from_branch_name(repo_path, branch_name)
             .or_else(|_| {
                 let repo = self.open_repo(repo_path)?;
-                Ok(self.first_remote_name(&repo))
+                Ok(self.default_remote_name(&repo))
             })
     }
 
@@ -1701,7 +1700,7 @@ impl GitService {
         self.check_worktree_clean(&repo)?;
 
         // Get the remote
-        let remote_name = self.first_remote_name(&repo);
+        let remote_name = self.default_remote_name(&repo);
         let remote = repo.find_remote(&remote_name)?;
 
         let remote_url = remote
@@ -1757,8 +1756,8 @@ impl GitService {
         branch: &Reference,
     ) -> Result<(), GitServiceError> {
         let remote = self.get_remote_from_branch_ref(repo, branch)?;
-        let first_remote_name = self.first_remote_name(repo);
-        let remote_name = remote.name().unwrap_or(&first_remote_name);
+        let default_remote_name = self.default_remote_name(repo);
+        let remote_name = remote.name().unwrap_or(&default_remote_name);
         let dest_ref = branch
             .name()
             .ok_or_else(|| GitServiceError::InvalidRepository("Invalid branch ref".into()))?;
@@ -1774,8 +1773,8 @@ impl GitService {
         repo: &Repository,
         remote: &Remote,
     ) -> Result<(), GitServiceError> {
-        let first_remote_name = self.first_remote_name(repo);
-        let remote_name = remote.name().unwrap_or(&first_remote_name);
+        let default_remote_name = self.default_remote_name(repo);
+        let remote_name = remote.name().unwrap_or(&default_remote_name);
         let refspec = format!("+refs/heads/*:refs/remotes/{remote_name}/*");
         self.fetch_from_remote(repo, remote, &refspec)
     }
